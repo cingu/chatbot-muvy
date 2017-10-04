@@ -17,11 +17,6 @@
 require('dotenv').config();
 
 var middleware = require('botkit-middleware-watson')({
-  /*username: "d47e0597-6560-4d3d-8266-a42bfea3a428",
-  password: "ImE13rTVXeEM",
-  workspace_id: "35ea2f89-7080-48c9-a0f2-e809124673dd",
-  url: process.env.CONVERSATION_URL || 'https://gateway.watsonplatform.net/conversation/api',
-  version_date: '2017-05-26'*/
   username: process.env.CONVERSATION_USERNAME,
   password: process.env.CONVERSATION_PASSWORD,
   workspace_id: process.env.WORKSPACE_ID,
