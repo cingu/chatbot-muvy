@@ -1,3 +1,0 @@
-applications:
-- name:    muvy-chatbot
-command: node server.js
