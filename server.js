@@ -15,16 +15,17 @@ app.set('port', port);
 
 //require('./db');
 require('./app')(app);
+
+// 1075190579246309
 // 1075190579246309
 // 1075190579246309
 // Listen on the specified port
 app.listen(port, function() {
   console.log('Client server listening on port ' + port);
-  greetingText();
-  test();
+  //greetingText();
+  //followUp();
 });
 
-/*
 app.get('/facebook/receive', (req, res) => {
   if (req.query['hub.mode'] && req.query['hub.verify_token'] === 'tuxedo_cat') {
     res.status(200).send(req.query['hub.challenge']);
@@ -32,21 +33,89 @@ app.get('/facebook/receive', (req, res) => {
     res.status(403).end();
   }
 });
- */
-function test(){app.post('/facebook/receive', (req, res) => {
-  console.log(req.body);
+
+
+app.post('/facebook/receive', (req, res) => {
+console.log(req.body);
   if (req.body.object === 'page') {
     req.body.entry.forEach((entry) => {
       entry.messaging.forEach((event) => {
         if (event.message && event.message.text) {
-          console.log(event.sender.id);
-          
+          sendMessage(event);
+          followUp(event);   
+                 
         }
       });
     });
     res.status(200).end();
   }
-});}
+});
+
+function followUp(event) {
+ console.log("cba");
+ let sender = event.sender.id;
+
+ request({
+    url: 'https://graph.facebook.com/v2.6/me/messages',
+    qs: {access_token: process.env.FB_ACCESS_TOKEN}, /********* */
+    method: 'POST',
+    json: {
+      recipient: {id: sender},
+      message:{text:"This is a follow-up message"},
+      tag:"ISSUE_RESOLUTION"
+    }
+  }, function (error, response) {
+    if (error) {
+        console.log('Error sending message: ', error);
+    } else if (response.body.error) {
+        console.log('Error: ', response.body.error);
+    }
+  });
+}
+
+//1482231988523798
+
+function sendMessage(event) {
+  let sender = event.sender.id;
+  let text = event.message.text;  
+
+  request({
+    url: 'https://graph.facebook.com/v2.6/me/messages',
+    qs: {access_token: process.env.FB_ACCESS_TOKEN},
+    method: 'POST',
+    json: {
+      recipient: {id: sender},
+      message: {text: sender}
+    }
+  }, function (error, response) {
+    if (error) {
+        console.log('Error sending message: ', error);
+    } else if (response.body.error) {
+        console.log('Error: ', response.body.error);
+    }
+  });
+}
+
+function getTags(event) {
+  let sender = event.sender.id;
+  let text = event.message.text;  
+
+  request({
+    url: 'https://graph.facebook.com/v2.6/page_message_tags',
+    qs: {access_token: process.env.FB_ACCESS_TOKEN},
+    method: 'GET',
+    json: {
+      recipient: {id: sender},
+      message: {text: sender}
+    }
+  }, function (error, response) {
+    if (error) {
+        console.log('Error sending message: ', error);
+    } else if (response.body.error) {
+        console.log('Error: ', response.body.error);
+    }
+  });
+}
 
 /*
 function greetingText1(event) {
