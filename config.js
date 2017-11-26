@@ -8,7 +8,8 @@ config.database = {
 };
 
 config.collection = {
-    "id": "Movies"
+    "movies": "Movies",
+    "usersGenre": "UsersGenre"
 };
 
 module.exports = config;

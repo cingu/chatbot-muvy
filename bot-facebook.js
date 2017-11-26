@@ -23,8 +23,8 @@ var controller = Botkit.facebookbot({
 });
 
 var bot = controller.spawn();
-var city, genre, genre_2, genre_3, aaa, aaa_2, aaa_3 = "";
-var top_3, aleatoire = false;
+var city, genre = "", genre_2, genre_3, aaa, aaa_2, aaa_3 = "";
+var top_3, aleatoire, todo_por_ti, city, emptyTodo = false;
 //check if Watson's reply is 'values' for db-query
 var reply = "";
 //split Watson's 'values'-reply
@@ -33,68 +33,175 @@ var values = "";
 var recommended = [];
 //message composition for line break
 var messageComposition = "";
+var allMatched = 10;
+var noOfRecommended = 0;
+var todoPorTiMovies = [];
+var request = "";
 
 controller.hears('(.*)', 'message_received', function(bot, message) {
   reply = message.watsonData.output.text;      
 
    if (message.watsonError) {
       console.log(message.watsonError);
-      bot.reply(message, "I'm sorry, but for technical reasons I can't respond to your message");
+      bot.replyWithTyping(message, "I'm sorry, but for technical reasons I can't respond to your message");
 
    } else if(check(reply)) {                     
       var splitValues = values.split(", ");      
       var parameterArray = setValues(splitValues);                  
-      var dbValues;        
+      var dbValues = "";              
+      
+      if(top_3 == true || aleatoire == true){
+        randomTop(parameterArray);
+      } else if ((todo_por_ti == true) || (city == true && top_3 == false && aleatoire == false)){
+        //console.log("in"+ todo_por_ti+ "----"+city);
+        console.log(request+"---"+parameterArray);
+        console.log(typeof request);
+        console.log(typeof parameterArray);        
+        console.log(request===parameterArray);
+        console.log(request!==parameterArray);
+        //String(request)!==String(parameterArray)
+        if(request==""){                              
+          innerFunction(parameterArray);
+        } else if(request==String(parameterArray)){
+            todoPorTi(parameterArray);
+        } else if(request!=String(parameterArray)){            
+            innerFunction(parameterArray);
+        }        
+      }      
 
-    var getFromDB = db.queryCollection(parameterArray)
-      .then(() => {         
-         dbValues = db.getResultArray(); 
-         console.log("lengthy " +dbValues.length);                
-                
-          if(dbValues.length==3){                         
-            var top3Reply = getTop3(dbValues);
-            bot.reply(message, top3Reply[0]);
-            bot.reply(message, top3Reply[1]);
-            bot.reply(message, top3Reply[2]);
-                      
-          } else if(dbValues.length == 0) {
-            bot.reply(message, "I'm sorry but apparently I couldn't find movies matching your criterias."+
-                               "\nPerhaps you could change genre or actor and I'll search anew? "+ 
-                               "Which hopefully will give better results than this.");  
-          } else {                    
-            var movie = getMovie(dbValues);
-
-            if(movie[0]==false){
-              bot.reply(message, movie[1]);
-            } else {
-              console.log(movie[0]);
-              console.log(movie[1]);
-bot.reply(message, "already recommended");
-
-            }
-            /*movie = String(dbValues[0].movie);            
-            resume = String(dbValues[0].resume);
-            //score = String(dbValues[0].score);
-            link = String(dbValues[0].link);            
-            checkActor = dbValues[0].starring;
-            checkGenre = dbValues[0].genre;            
-            actors = getActors(checkActor);
-            genre = getGenre(checkGenre);             
-            bot.reply(message, "*"+movie+"*" + "\n\n" + "*Resume:* " + resume + "\n\n" + "*Genre:* " + genre + "\n\n" +
-                        "*Actors:* " + actors + "\n\n" + "*Read more and book tickets here:* " + link + "\n\n\n" );                                                 
-            */
-            //bot.reply(message, "Quite working huh");
-          }        
-    })      
-      .catch((error) => { `Completed with error ${JSON.stringify(error)}` }); 
    } else if(!check(reply)) { 
       if(lineBreakMessage(reply)){
         console.log(messageComposition);
-        bot.reply(message, messageComposition);  
-      } else {bot.reply(message, reply.join('\n'));  }
+        bot.replyWithTyping(message, messageComposition);  
+      } else {bot.replyWithTyping(message, reply.join('\n'));  }
   }
+
+  function innerFunction(parameterArray){    
+    request = parameterArray;
+    todoPorTiMovies.length = 0;    
+    console.log("inner"+ parameterArray);    
     
+    db.todoPorTi(parameterArray)
+      .then(()=>{        
+        var dbValues = db.getResultArray();                 
+        //dbValues = db.removeDuplicates(theDbValues);         
+        console.log(dbValues);
+
+        if (dbValues.length==0){          
+            bot.replyWithTyping(message, "Unfortunately, it seems like I don't have any movies fitting your criterias. "+
+                              "You can make a new request and provide me other criterias to work with - "+
+                              "or perhaps you'd like a random suggestion?");      
+        } else if(dbValues.length==1){
+            var movie = getMovieInfo(dbValues,0);          
+            bot.replyWithTyping(message, movie[1]);          
+        } else if (dbValues.length>1) {
+            todoPorTiMovies = dbValues;          
+            var last = todoPorTiMovies.length-1;             
+            var movie = getMovieInfo(todoPorTiMovies,last);          
+            todoPorTiMovies.pop();
+            var recommendedCheck = movie[0]; 
+
+            if(todoPorTiMovies.length==0){
+              emptyTodo = true;
+            }                   
+
+            if(recommendedCheck==false){
+              bot.replyWithTyping(message, movie[1]);
+            } else {
+              todoPorTi();
+            }
+        } 
+        
+        if(genre!=""){          
+          var lastGenre = lastGenreParam(message, genre);
+          console.log(lastGenre);
+          console.log(genre);
+          db.checkAndUpdateUserGenre(lastGenre)
+          .then(()=>{           
+          }).catch((error) => { `Completed with error ${JSON.stringify(error)}` }); 
+        } else{console.log("2"+lastGenre);console.log("2"+genre);}
+
+      }).catch((error) => { `Completed with error ${JSON.stringify(error)}` });           
+  }
+
+  function todoPorTi(parameterArray){   
+    //console.log(todoPorTiMovies.length);        
+    if (todoPorTiMovies.length>0) {       
+      var last = todoPorTiMovies.length-1;
+      var movie = getMovieInfo(todoPorTiMovies,last);
+      todoPorTiMovies.pop();
+      var recommendedCheck = movie[0];
+
+      if(todoPorTiMovies.length==0){
+        emptyTodo = true;
+      }
+
+      if(recommendedCheck==false){
+        bot.replyWithTyping(message, movie[1]);
+      } else {
+        todoPorTi();
+      }
+    } else if (todoPorTiMovies.length==0 || emptyTodo==true){       
+      emptyTodo = false; 
+      bot.replyWithTyping(message, "Slightly embarassing but I've run out of movies that fit your criterias. "+
+                          "Perhaps you'd like to make another request and provide me new criterias.\n");   
+    } else if (noOfRecommended==allMatched){
+        noOfRecommended = 0;
+        bot.replyWithTyping(message, "Slightly embarassing but I've run out of movies. "+
+                            "Sadly, there wasn't anything for your taste? "+
+                            "If you would like to reconsider and make another request then feel free to do so.\n");
+    }  
+  } 
+
+  function randomTop(parameterArray){    
+    db.queryCollection(parameterArray)
+    .then(() => {               
+      dbValues = db.getResultArray(); 
+      console.log("lengthy " +dbValues.length);     
+      //console.log(message.user);                 
+              
+        if(dbValues.length==3 && top_3==true){                         
+          var top3Reply = getTop3(dbValues);
+          bot.replyWithTyping(message, top3Reply[0]);
+          bot.replyWithTyping(message, top3Reply[1]);
+          bot.replyWithTyping(message, top3Reply[2]);                                    
+        } else if(dbValues.length == 0) {
+          bot.replyWithTyping(message, "I'm sorry but apparently I couldn't find movies matching your criterias."+
+                              "\nPerhaps you could change genre or actor and I'll search anew? "+ 
+                              "Which hopefully will give better results than this.");  
+        } else if (noOfRecommended==allMatched) {
+          var movie = getMovieInfo(dbValues,0);
+          noOfRecommended = 0;
+          recommended.length = [];
+          bot.replyWithTyping(message, "Slightly embarassing but I've run out of movies. "+
+                              "So here's another movie you've already been recommended - "+
+                              "perhaps you'll reconsider? \n");
+          bot.replyWithTyping(message, movie[1]);  
+        } else if(dbValues.length<3){                          
+          var movie = getMovieInfo(dbValues,0);
+          var recommendedCheck = movie[0];          
+
+          if(recommendedCheck==false){
+            bot.replyWithTyping(message, movie[1]);
+          } else if (recommendedCheck==true && aleatoire==true){
+            aleatoire = false;
+            randomTop();
+            console.log("getting new movie");                
+          } 
+        }      
+    }).catch((error) => { `Completed with error ${JSON.stringify(error)}` });           
+  }    
 });
+
+function lastGenreParam(message,genre){
+  console.log("genre"+typeof genre);
+  console.log("genre"+String(genre)!="");
+  console.log("genre"+String(genre)=="");
+  //if(String(genre)!=""){
+    var lastGenre = {"id": message.user,"genre":String(genre)};
+    return lastGenre;
+  //} else {return false;}
+}
 
 function getTop3(dbValues){  
   var top3Reply = [];  
@@ -142,28 +249,27 @@ function getTop3(dbValues){
   return top3Reply;  
 }
 
-function getMovie(dbValues){    
+function getMovieInfo(dbValues, index){    
   var returnArray = [];
   var movie, resume, score, genre, actor, link, checkGenre, checkActor = "";
-  
-  movie = String(dbValues[0].movie);            
-  resume = String(dbValues[0].resume);  
-  link = String(dbValues[0].link);            
-  checkActor = dbValues[0].starring;
-  checkGenre = dbValues[0].genre;            
+  //console.log("længde"+dbValues.length);
+  movie = String(dbValues[index].movie);            
+  resume = String(dbValues[index].resume);  
+  link = String(dbValues[index].link);            
+  checkActor = dbValues[index].starring;
+  checkGenre = dbValues[index].genre;            
   actors = getActors(checkActor);
   genre = getGenre(checkGenre);             
   
   var replyString = "*"+movie+"*" + "\n\n" + "*Resume:* " + resume + "\n\n" + "*Genre:* " + genre + "\n\n" +
-                        "*Actors:* " + actors + "\n\n" + "*Read more and book tickets here:* " + link + "\n\n\n";
+                        "*Starring:* " + actors + "\n\n" + "*Read more and book tickets here:* " + link + "\n\n\n";
     
-  var x = addToRecommended(movie);
-  returnArray.push(x);
+  var recommendedCheck = addToRecommended(movie);
+  returnArray.push(recommendedCheck);
   returnArray.push(replyString);
 
   return returnArray;  
 }
-
 
 function getGenre(checkGenre){
   var genres = "";
@@ -180,12 +286,11 @@ function getActors(checkActors){
   for (i=0; i<checkActors.length; i++){
     actors += String(checkActors[i].actor) + ", ";    
   }
-  
+    
   return actors.substr(0, actors.length-2);
 }
 
-function check(reply){
-  //console.log(reply);    
+function check(reply){    
   var message = String(reply[0]);  
   if(message.includes("=")){ 
       var splitMessage = message.split("= ");      
@@ -203,11 +308,11 @@ function check(reply){
 
 function lineBreakMessage(reply){
   var message = connectReplies(reply);
-  console.log(message);
+  //console.log(message);
   messageComposition = "";   
   if(message.includes("&&")){
     var splitMessage = message.split("&&");   
-    console.log(splitMessage.length);
+    //console.log(splitMessage.length);
     for(i=0;i<splitMessage.length;i++){
       messageComposition += splitMessage[i] + "\n\n";
     }
@@ -225,8 +330,8 @@ function connectReplies(reply){
 }
 
 function setValues(arr){
-  var parameterArray = [];  
-  top_3, aleatoire = false;  
+  var parameterArray = [];    
+  top_3 = aleatoire = city = todo_por_ti = false;  
 
   for (i=0; i<arr.length; i++){
     var value = String(arr[i]); 
@@ -234,10 +339,11 @@ function setValues(arr){
   
     if (String(keyValue[0])=="city"){
       //city = keyValue[1];
-      parameterArray.push("city:"+keyValue[1]);
-      //console.log("stupid  "+parameterArray);
+      city = true;
+      parameterArray.push("city:"+keyValue[1]);      
     } else if (String(keyValue[0])=="genre"){
-      //genre = keyValue[1];
+      genre = keyValue[1];
+      todo_por_ti = true;
       parameterArray.push("genre:"+keyValue[1]);
     } else if (String(keyValue[0])=="genre_2"){
       //genre_2 = keyValue[1];
@@ -247,9 +353,10 @@ function setValues(arr){
       parameterArray.push("genre_3:"+keyValue[1]);
     } else if (String(keyValue[0])=="aaa"){
       //aaa = keyValue[1];
+      todo_por_ti = true;
       parameterArray.push("aaa:"+keyValue[1]);
     } else if (String(keyValue[0])=="aaa_2"){
-      //aaa_2 = keyValue[1];
+      //aaa_2 = keyValue[1];      
       parameterArray.push("aaa_2:"+keyValue[1]);
     } else if (String(keyValue[0])=="aaa_3"){
       //aaa_3 = keyValue[1];
@@ -268,12 +375,11 @@ function setValues(arr){
 }
 
 function addToRecommended(movie){
-  console.log(recommended);
   var contains = false;
 
   if(recommended.length==0){
     recommended.push(movie);
-    console.log("was empty");
+    //console.log("was empty");
   } else {
     for(i=0;i<recommended.length;i++){
       if(recommended[i]==movie){
@@ -281,11 +387,10 @@ function addToRecommended(movie){
       } 
     } if(contains==false){
       recommended.push(movie);
-      console.log(movie);
-      console.log(recommended);
+      noOfRecommended++;
+      //console.log(noOfRecommended);
     }
-  }
-  console.log(contains);
+  }  
   return contains;
 }
 
